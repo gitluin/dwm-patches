@@ -1,0 +1,149 @@
+diff -u dwm/config.def.h dwm-b/config.def.h
+--- dwm/config.def.h	2020-07-28 16:05:12.843805486 -0400
++++ dwm-b/config.def.h	2020-07-28 16:04:32.090473126 -0400
+@@ -1,5 +1,7 @@
+ /* See LICENSE file for copyright and license details. */
+ 
++#define CORNER_RADIUS 20
++
+ /* appearance */
+ static const unsigned int borderpx  = 1;        /* border pixel of windows */
+ static const unsigned int snap      = 32;       /* snap pixel */
+diff -u dwm/dwm.c dwm-b/dwm.c
+--- dwm/dwm.c	2020-05-29 08:09:14.229662527 -0400
++++ dwm-b/dwm.c	2020-07-28 16:10:06.923798394 -0400
+@@ -41,6 +41,7 @@
+ #include <X11/extensions/Xinerama.h>
+ #endif /* XINERAMA */
+ #include <X11/Xft/Xft.h>
++#include <X11/extensions/shape.h>
+ 
+ #include "drw.h"
+ #include "util.h"
+@@ -236,6 +237,9 @@
+ static int xerrorstart(Display *dpy, XErrorEvent *ee);
+ static void zoom(const Arg *arg);
+ 
++static void roundcorners(Client* c);
++static void unroundcorners(Client* c);
++
+ /* variables */
+ static const char broken[] = "broken";
+ static char stext[256];
+@@ -547,6 +551,7 @@
+ 	ce.above = None;
+ 	ce.override_redirect = False;
+ 	XSendEvent(dpy, c->win, False, StructureNotifyMask, (XEvent *)&ce);
++	roundcorners(c);
+ }
+ 
+ void
+@@ -1183,6 +1188,7 @@
+ 				togglefloating(NULL);
+ 			if (!selmon->lt[selmon->sellt]->arrange || c->isfloating)
+ 				resize(c, nx, ny, c->w, c->h, 1);
++
+ 			break;
+ 		}
+ 	} while (ev.type != ButtonRelease);
+@@ -1333,6 +1339,7 @@
+ 			}
+ 			if (!selmon->lt[selmon->sellt]->arrange || c->isfloating)
+ 				resize(c, c->x, c->y, nw, nh, 1);
++
+ 			break;
+ 		}
+ 	} while (ev.type != ButtonRelease);
+@@ -1372,6 +1379,50 @@
+ }
+ 
+ void
++roundcorners(Client *c)
++{
++	int diam;
++	Pixmap mask;
++	GC shapegc;
++
++	if (CORNER_RADIUS < 0)
++		return;
++
++	if (!c || c->isfullscreen)
++		return;
++
++	diam = 2 * CORNER_RADIUS;
++	if (c->w < diam || c->h < diam)
++		return;
++
++	if (!(mask = XCreatePixmap(dpy, c->win, c->w, c->h, 1)))
++		return;
++	
++	if (!(shapegc = XCreateGC(dpy, mask, 0, NULL))){
++	    XFreePixmap(dpy, mask);
++	    free(shapegc);
++	    return;
++	}
++
++	XFillRectangle(dpy, mask, shapegc, 0, 0, c->w, c->h);
++	XSetForeground(dpy, shapegc, 1);
++
++	/* topleft, topright, bottomleft, bottomright
++	 * man XArc - positive is counterclockwise
++	 */
++	XFillArc(dpy, mask, shapegc, 0, 		0, 			diam, diam, 90 * 64, 90 * 64);
++	XFillArc(dpy, mask, shapegc, c->w - diam - 1, 	0, 			diam, diam, 0 * 64, 90 * 64);
++	XFillArc(dpy, mask, shapegc, 0,			c->h - diam - 1,	diam, diam, -90 * 64, -90 * 64);
++	XFillArc(dpy, mask, shapegc, c->w - diam - 1,	c->h - diam - 1,	diam, diam, 0 * 64, -90 * 64);
++
++	XFillRectangle(dpy, mask, shapegc, CORNER_RADIUS, 0, c->w - diam, c->h);
++	XFillRectangle(dpy, mask, shapegc, 0, CORNER_RADIUS, c->w, c->h - diam);
++	XShapeCombineMask(dpy, c->win, ShapeBounding, 0, 0, mask, ShapeSet);
++	XFreePixmap(dpy, mask);
++	XFreeGC(dpy, shapegc);
++}
++
++void
+ run(void)
+ {
+ 	XEvent ev;
+@@ -1483,6 +1534,7 @@
+ 		c->bw = 0;
+ 		c->isfloating = 1;
+ 		resizeclient(c, c->mon->mx, c->mon->my, c->mon->mw, c->mon->mh);
++		unroundcorners(c);
+ 		XRaiseWindow(dpy, c->win);
+ 	} else if (!fullscreen && c->isfullscreen){
+ 		XChangeProperty(dpy, c->win, netatom[NetWMState], XA_ATOM, 32,
+@@ -1803,6 +1855,31 @@
+ }
+ 
+ void
++unroundcorners(Client *c)
++{
++	Pixmap mask;
++	GC shapegc;
++
++	if (CORNER_RADIUS < 0 || !c)
++		return;
++
++	if (!(mask = XCreatePixmap(dpy, c->win, c->w, c->h, 1)))
++		return;
++	
++	if (!(shapegc = XCreateGC(dpy, mask, 0, NULL))){
++	    XFreePixmap(dpy, mask);
++	    free(shapegc);
++	    return;
++	}
++
++	XSetForeground(dpy, shapegc, 1);
++	XFillRectangle(dpy, mask, shapegc, 0, 0, c->w, c->h);
++	XShapeCombineMask(dpy, c->win, ShapeBounding, 0, 0, mask, ShapeSet);
++	XFreePixmap(dpy, mask);
++	XFreeGC(dpy, shapegc);
++}
++
++void
+ updatebars(void)
+ {
+ 	Monitor *m;
+Only in dwm/: .git
+Common subdirectories: dwm/patches and dwm-b/patches
